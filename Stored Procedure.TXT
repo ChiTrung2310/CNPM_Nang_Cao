@@ -1,0 +1,111 @@
+USE QL_BANHANG
+GO
+----------1.Viết Stored Procedure thêm khách hàng mới
+IF EXISTS(SELECT NAME FROM SYSOBJECTS WHERE NAME = 'pr_ThemKH')
+	DROP PROC pr_ThemKH
+GO
+CREATE PROC pr_ThemKH
+(
+	@MSKH			CHAR(10),
+	@TENKH			NVARCHAR(30),
+	@PHAI			NCHAR(5),
+	@DIACHI			NVARCHAR(100),
+	@DIENTHOAI		VARCHAR(10)
+)
+AS
+BEGIN
+	IF EXISTS(SELECT MSKH FROM KHACHHANG WHERE MSKH = @MSKH)
+	BEGIN
+		RAISERROR(N'Mã khách hàng: %s này đã tồn tại!!!!...Huhuhuhu', 16, 1, @MSKH)
+	END
+	ELSE
+	BEGIN
+		INSERT INTO KHACHHANG(MsKH, TENKH, PHAI, DIACHI, DIENTHOAI)
+			VALUES(@MsKH, @TENKH, @PHAI, @DIACHI, @DIENTHOAI)
+		RAISERROR(N'Thêm khách hàng: %s - %s MỚI này thành công!!!...Kakakakaka', 16, 1, @MSKH, @TENKH)
+	END
+END
+GO
+----------2.Viết Stored Procedure sửa khách hàng: TENKH, PHAI, DIACHI, DIENTHOAI
+IF EXISTS(SELECT NAME FROM SYSOBJECTS WHERE NAME='pr_SuaKH')
+	DROP PROC pr_SuaKH
+GO
+CREATE PROC pr_SuaKH
+(
+	@MSKH			CHAR(10),
+	@TENKH			NVARCHAR(30),
+	@PHAI			NCHAR(5),
+	@DIACHI			NVARCHAR(100),
+	@DIENTHOAI		VARCHAR(10)
+)
+AS
+BEGIN
+	IF EXISTS(SELECT MSKH FROM KHACHHANG WHERE MsKH = @MSKH)
+	BEGIN
+		UPDATE KHACHHANG
+		SET		TENKH = @TENKH,
+				PHAI = @PHAI,
+				DIACHI = @DIACHI,
+				DIENTHOAI = @DIENTHOAI
+		WHERE  MsKH = @MSKH
+		RAISERROR(N'Sửa thông tin khách hàng thành công!', 16, 1)
+	END
+	ELSE
+		RAISERROR(N'Sửa thông tin khách hàng không thành công!', 16, 1)
+END
+GO
+----------3.Viết Stored Procedure xóa khách hàng, dựa vào MsKH
+IF EXISTS(SELECT NAME FROM SYSOBJECTS WHERE NAME='pr_XoaKH')
+	DROP PROC pr_XoaKH
+GO
+CREATE PROC pr_XoaKH
+(
+	@MSKH			CHAR(10)
+)
+AS
+BEGIN
+	------Trường hợp 1: Khách hàng chưa có hóa đơn
+	IF EXISTS(SELECT MSKH FROM KHACHHANG WHERE MsKH = @MSKH)
+		IF NOT EXISTS(SELECT MSKH FROM HOADON WHERE MSKH = @MSKH)
+		BEGIN
+			DELETE KHACHHANG WHERE MsKH = @MSKH
+			RAISERROR(N'Đã xóa thành công khách hàng chưa có mua hàng!', 16, 1)
+		END
+	ELSE
+		------Trường hợp 2: Khách hàng đã mua hàng
+		IF EXISTS(SELECT * FROM HOADON hd, CHITIET_HD ct WHERE hd.MSHD = ct.MSHD and hd.MSKH = @MSKH)
+		BEGIN
+			declare @hd char(10)
+			SELECT @hd = MSHD FROM HOADON WHERE MSKH = @MSKH
+			----------------------------------------------
+			DELETE CHITIET_HD WHERE MSHD = @hd				--Xóa các mặt hàng theo hóa đơn
+			DELETE HOADON WHERE MSKH = @MSKH AND MSHD = @hd	--Xóa các hơn đơn theo khách hàng
+			DELETE KHACHHANG WHERE MsKH = @MSKH				--Xóa khách hàng trong bảng khách hàng
+		END
+END
+GO
+----------4.Viết Stored Procedure Báo cáo doanh số cho từng mặt hàng [Từ ngày - Đến ngày]
+IF EXISTS(SELECT NAME FROM SYSOBJECTS WHERE NAME='prBCDSMH')
+	DROP PROC prBCDSMH
+GO
+CREATE PROC prBCDSMH
+(
+	@Tungay		Datetime,
+	@Denngay	Datetime
+)
+AS
+BEGIN
+		SELECT	mh.MSMH,
+				mh.TENMH,
+				mh.DONVITINH,
+				sum(ct.SOLUONG) as SOLUONG,
+				sum(ct.SOLUONG*mh.DONGIA) as THANHTIEN
+		FROM	HOADON hd, CHITIET_HD ct, MATHANG mh
+		WHERE	hd.MSHD = ct.MSHD	and
+				ct.MSMH = mh.MSMH	and
+				hd.NGAYHD Between @Tungay and @Denngay
+		GROUP BY mh.MSMH,
+				 mh.TENMH,
+				 mh.DONVITINH
+END
+SELECT * FROM KHACHHANG
